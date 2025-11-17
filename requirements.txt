@@ -1,4 +1,3 @@
 flask
 youtube-transcript-api
 openai
-requests

@@ -62,27 +62,24 @@ def extract_video_id(youtube_url: str) -> str:
 
 
 def fetch_transcript_text(video_id: str) -> str:
-    """Fetch a transcript via YouTubeTranscriptApi, falling back to Whisper if needed."""
+    """Try YouTube transcripts first, then fall back to Whisper."""
     if not video_id:
         return ""
 
-    # Step A: Try direct transcripts or translations to English via YouTubeTranscriptApi
+    # STEP A — Try YouTubeTranscriptAPI first
     try:
         transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        english_transcripts = [
-            transcript
-            for transcript in transcripts
-            if (getattr(transcript, "language_code", "") or "").lower().startswith("en")
-        ]
-        for transcript in english_transcripts:
-            try:
-                fetched = transcript.fetch()
-                combined = " ".join(entry.get("text", "") for entry in fetched).strip()
-                if combined:
-                    return combined
-            except Exception:
-                continue
+        for transcript in transcripts:
+            language_code = (getattr(transcript, "language_code", "") or "").lower()
+            if language_code.startswith("en"):
+                try:
+                    fetched = transcript.fetch()
+                    combined = " ".join(entry.get("text", "") for entry in fetched).strip()
+                    if combined:
+                        return combined
+                except Exception:
+                    continue
 
         for transcript in transcripts:
             if not getattr(transcript, "is_translatable", False):
@@ -97,13 +94,14 @@ def fetch_transcript_text(video_id: str) -> str:
     except Exception:
         pass
 
-    # Step B: Fallback to Whisper transcription using downloaded audio
+    # STEP B — Whisper fallback
     temp_file_path = ""
     try:
         yt = YouTube(f"https://www.youtube.com/watch?v={video_id}")
         stream = (
             yt.streams.filter(only_audio=True)
             .order_by("abr")
+            .desc()
             .first()
         )
         if not stream:
@@ -120,11 +118,11 @@ def fetch_transcript_text(video_id: str) -> str:
 
         with open(temp_file_path, "rb") as audio_file:
             transcription = openai.Audio.transcribe("whisper-1", audio_file)
-            text = transcription.get("text", "").strip()
+            text = (transcription or {}).get("text", "").strip()
             if text:
                 return text
     except Exception:
-        return ""
+        pass
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -132,6 +130,7 @@ def fetch_transcript_text(video_id: str) -> str:
             except Exception:
                 pass
 
+    # STEP C — If everything fails, return empty string
     return ""
 
 

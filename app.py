@@ -5,8 +5,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 from flask import Flask, render_template, request
 from openai import OpenAI
-from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
-                                    YouTubeTranscriptApi)
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 app = Flask(__name__)
 
@@ -39,20 +38,20 @@ def extract_video_id(url: str) -> str:
 def fetch_transcript_text(video_id: str) -> str:
     """
     Try to download an English transcript for the given video_id.
-    Prefer human-created transcripts, then auto-generated.
+    Use YouTubeTranscriptApi.get_transcript with English languages.
     Return the transcript text as one big string.
     Return an empty string if no transcript is available.
     """
 
     try:
-        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-        try:
-            transcript = transcripts.find_manually_created_transcript(['en'])
-        except Exception:  # noqa: BLE001
-            transcript = transcripts.find_generated_transcript(['en'])
-        entries = transcript.fetch()
-        return " ".join(entry["text"] for entry in entries)
+        entries = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=["en", "en-US"],
+        )
+        return " ".join(entry.get("text", "") for entry in entries)
     except (TranscriptsDisabled, NoTranscriptFound, KeyError, ValueError):
+        return ""
+    except Exception:
         return ""
 
 

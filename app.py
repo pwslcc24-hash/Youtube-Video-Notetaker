@@ -62,42 +62,18 @@ def extract_video_id(youtube_url: str) -> str:
 
 
 def fetch_transcript_text(video_id: str) -> str:
-    """Try YouTube transcripts first, then fall back to Whisper."""
+    """
+    Get transcript by downloading audio and using Whisper only.
+    Ignore YouTube's caption API completely.
+    """
     if not video_id:
         return ""
 
-    # STEP A — Try YouTubeTranscriptAPI first
-    try:
-        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        for transcript in transcripts:
-            language_code = (getattr(transcript, "language_code", "") or "").lower()
-            if language_code.startswith("en"):
-                try:
-                    fetched = transcript.fetch()
-                    combined = " ".join(entry.get("text", "") for entry in fetched).strip()
-                    if combined:
-                        return combined
-                except Exception:
-                    continue
-
-        for transcript in transcripts:
-            if not getattr(transcript, "is_translatable", False):
-                continue
-            try:
-                translated = transcript.translate("en").fetch()
-                combined = " ".join(entry.get("text", "") for entry in translated).strip()
-                if combined:
-                    return combined
-            except Exception:
-                continue
-    except Exception:
-        pass
-
-    # STEP B — Whisper fallback
     temp_file_path = ""
     try:
-        yt = YouTube(f"https://www.youtube.com/watch?v={video_id}")
+        yt = YouTube(video_url)
         stream = (
             yt.streams.filter(only_audio=True)
             .order_by("abr")
@@ -122,7 +98,7 @@ def fetch_transcript_text(video_id: str) -> str:
             if text:
                 return text
     except Exception:
-        pass
+        return ""
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -130,7 +106,6 @@ def fetch_transcript_text(video_id: str) -> str:
             except Exception:
                 pass
 
-    # STEP C — If everything fails, return empty string
     return ""
 
 
@@ -177,7 +152,7 @@ def index():
         else:
             transcript_text = fetch_transcript_text(video_id)
             if not transcript_text:
-                error_message = "This video doesn’t expose an English transcript through the API. Try another video."
+                error_message = "Could not get a transcript for this video (audio transcription failed). Make sure the video is public and try again."
             else:
                 success, response_text = summarize_transcript(transcript_text)
                 if success:

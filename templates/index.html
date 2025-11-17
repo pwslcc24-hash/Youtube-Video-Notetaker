@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YouTube AI Notetaker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f7f7fb;
+            color: #1c1c1c;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 640px;
+            margin: 80px auto;
+            background: #fff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 12px 35px rgba(15, 23, 42, 0.1);
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+        }
+        p.description {
+            color: #4b5563;
+        }
+        form {
+            margin-top: 24px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            font-size: 1rem;
+        }
+        button {
+            margin-top: 16px;
+            width: 100%;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 14px 16px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        .error {
+            margin-top: 20px;
+            padding: 12px 16px;
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>YouTube AI Notetaker</h1>
+    <p class="description">Paste a YouTube link and get structured notes powered by AI.</p>
+    <form method="post" action="{{ url_for('summarize') }}">
+        <label for="video_url">YouTube URL</label>
+        <input type="url" id="video_url" name="video_url" placeholder="https://www.youtube.com/watch?v=..." required value="{{ previous_url or '' }}">
+        <button type="submit">Summarize</button>
+    </form>
+
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+</div>
+</body>
+</html>

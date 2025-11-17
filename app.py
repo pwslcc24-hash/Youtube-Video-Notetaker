@@ -62,51 +62,66 @@ def extract_video_id(youtube_url: str) -> str:
 
 
 def fetch_transcript_text(video_id: str) -> str:
-    """
-    Get transcript by downloading audio and using Whisper only.
-    Ignore YouTube's caption API completely.
-    """
+    """Fetch a transcript via the YouTube transcript API, then fall back to Whisper."""
     if not video_id:
         return ""
 
+    transcript_text = fetch_youtube_transcript(video_id)
+    if transcript_text:
+        return transcript_text
+
+    return fetch_transcript_via_whisper(video_id)
+
+
+def fetch_youtube_transcript(video_id: str) -> str:
+    try:
+        transcript = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=SUPPORTED_LANG_CODES
+        )
+    except (TranscriptsDisabled, NoTranscriptFound):
+        return ""
+    except Exception:
+        return ""
+
+    parts = []
+    for chunk in transcript:
+        text = chunk.get("text", "").replace("\n", " ").strip()
+        if text:
+            parts.append(text)
+    return " ".join(parts).strip()
+
+
+def fetch_transcript_via_whisper(video_id: str) -> str:
     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    temp_file_path = ""
     try:
         yt = YouTube(video_url)
         stream = (
-            yt.streams.filter(only_audio=True)
+            yt.streams.filter(only_audio=True, mime_type="audio/mp4")
             .order_by("abr")
             .desc()
             .first()
         )
         if not stream:
+            stream = (
+                yt.streams.filter(only_audio=True)
+                .order_by("abr")
+                .desc()
+                .first()
+            )
+        if not stream:
             return ""
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        temp_file_path = temp_file.name
-        temp_file.close()
-
-        stream.download(
-            output_path=os.path.dirname(temp_file_path) or ".",
-            filename=os.path.basename(temp_file_path),
-        )
-
-        with open(temp_file_path, "rb") as audio_file:
-            transcription = openai.Audio.transcribe("whisper-1", audio_file)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_filename = "audio.mp4"
+            stream.download(output_path=temp_dir, filename=temp_filename)
+            temp_file_path = os.path.join(temp_dir, temp_filename)
+            with open(temp_file_path, "rb") as audio_file:
+                transcription = openai.Audio.transcribe("whisper-1", audio_file)
             text = (transcription or {}).get("text", "").strip()
-            if text:
-                return text
+            return text
     except Exception:
         return ""
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception:
-                pass
-
-    return ""
 
 
 def summarize_transcript(transcript_text: str) -> Tuple[bool, str]:

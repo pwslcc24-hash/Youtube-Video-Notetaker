@@ -6,7 +6,7 @@ import requests
 from flask import Flask, render_template, request
 from openai import OpenAI
 from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
-                                    VideoUnavailable, YouTubeTranscriptApi)
+                                    YouTubeTranscriptApi)
 
 app = Flask(__name__)
 
@@ -37,22 +37,23 @@ def extract_video_id(url: str) -> str:
 
 
 def fetch_transcript_text(video_id: str) -> str:
-    try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-    except (TranscriptsDisabled, NoTranscriptFound):
-        # Attempt to fetch a manually translated transcript if available
-        try:
-            transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = transcripts.find_transcript(['en']).fetch()
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError("No transcript is available for this video.") from exc
-    except VideoUnavailable as exc:
-        raise RuntimeError("The requested video is unavailable.") from exc
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError("Could not download the transcript.") from exc
+    """
+    Try to download an English transcript for the given video_id.
+    Prefer human-created transcripts, then auto-generated.
+    Return the transcript text as one big string.
+    Return an empty string if no transcript is available.
+    """
 
-    text = " ".join(entry.get("text", "") for entry in transcript)
-    return text[:8000]
+    try:
+        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+        try:
+            transcript = transcripts.find_manually_created_transcript(['en'])
+        except Exception:  # noqa: BLE001
+            transcript = transcripts.find_generated_transcript(['en'])
+        entries = transcript.fetch()
+        return " ".join(entry["text"] for entry in entries)
+    except (TranscriptsDisabled, NoTranscriptFound, KeyError, ValueError):
+        return ""
 
 
 def fetch_video_title(video_url: str) -> str:
@@ -155,8 +156,12 @@ def index():
         except ValueError as exc:
             context["error"] = str(exc)
             return render_template("index.html", **context)
-        except RuntimeError as exc:
-            context["error"] = str(exc)
+
+        if not transcript_text:
+            context["error"] = (
+                "This video doesn’t have an available English transcript. "
+                "Try another video."
+            )
             return render_template("index.html", **context)
 
         prompt = (
